@@ -551,7 +551,7 @@ async def tambah(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user    = update.effective_user
 
     loading_msg = await update.message.reply_text(
-        f"Mengecek domain {get_display_url(request_url)}..."
+        f"\u23f3 Mengecek domain `{get_display_url(request_url)}`..."
     )
 
     try:
@@ -567,15 +567,16 @@ async def tambah(update: Update, context: ContextTypes.DEFAULT_TYPE):
         err = status["error"] or format_status_display(status)
         await safe_reply(
             update.message,
-            f"*Domain tidak bisa diakses!*\n"
-            f"--------------------\n"
-            f"Domain : {get_display_url(request_url)}\n"
-            f"Status : {err}\n"
+            f"\u274c *Domain tidak bisa diakses!*\n"
+            f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+            f"\U0001f310 Domain : `{get_display_url(request_url)}`\n"
+            f"\u26a0\ufe0f Status : `{err}`\n"
+            f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
             f"Pastikan domain aktif sebelum ditambahkan.",
         )
         return
 
-    loading_msg2 = await update.message.reply_text("Mengambil AMP URL...")
+    loading_msg2 = await update.message.reply_text("\u23f3 Mengambil AMP URL...")
 
     try:
         amp_url = await get_amp_url(request_url)
@@ -588,14 +589,14 @@ async def tambah(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if amp_url == "HTTP_ERROR":
         await update.message.reply_text(
-            "Server menolak request (HTTP 4xx). Domain tidak bisa dipantau."
+            "\u274c Server menolak request (HTTP 4xx). Domain tidak bisa dipantau."
         )
         return
 
     conn_warning = ""
     if amp_url == "CONN_ERROR":
         amp_url      = None
-        conn_warning = "\nAMP belum bisa diambil saat ini, akan dicoba kembali saat monitoring."
+        conn_warning = "\n\u26a0\ufe0f _AMP belum bisa diambil saat ini, akan dicoba kembali saat monitoring._"
 
     data = load_data()
     data[request_url] = {
@@ -620,13 +621,13 @@ async def tambah(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await safe_reply(
         update.message,
-        f"*DOMAIN DITAMBAHKAN*\n"
-        f"--------------------\n"
-        f"Domain   : {get_display_url(request_url)}\n"
-        f"Status   : {status_display}\n"
-        f"AMP Awal : {amp_display}\n"
-        f"Pemilik  : {mention}\n"
-        f"--------------------"
+        f"\u2705 *DOMAIN DITAMBAHKAN*\n"
+        f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+        f"\U0001f310 Domain   : `{get_display_url(request_url)}`\n"
+        f"\U0001f4e1 Status   : `{status_display}`\n"
+        f"\u26a1 AMP Awal : `{amp_display}`\n"
+        f"\U0001f464 Pemilik  : {mention}\n"
+        f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
         f"{conn_warning}",
         disable_web_page_preview=True,
     )
@@ -648,11 +649,11 @@ async def hapus(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_data(data)
         await safe_reply(
             update.message,
-            f"*Domain Dihapus*\n--------------------\n{get_display_url(request_url)}",
+            f"\U0001f5d1 *Domain Dihapus*\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\U0001f310 `{get_display_url(request_url)}`",
             disable_web_page_preview=True,
         )
     else:
-        await update.message.reply_text("Domain tidak ditemukan.")
+        await update.message.reply_text("\u26a0\ufe0f Domain tidak ditemukan.")
 
 
 # =====================
@@ -667,18 +668,16 @@ async def list_domains(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Belum ada domain tersimpan.")
         return
 
-    msg = ["*DAFTAR DOMAIN MONITORING*\n"]
+    msg = ["\U0001f4cb *DAFTAR DOMAIN MONITORING*\n"]
     for d in domains:
         info       = data[d]
         amp_now    = info.get("current_amp")
         amp_display = (
             get_display_url(amp_now)
             if amp_now and amp_now not in ("CONN_ERROR", "HTTP_ERROR")
-            else "Error / Tidak terdeteksi"
+            else "Tidak terdeteksi"
         )
-        page_status = info.get("last_page_status")
         http_status = info.get("last_http_status", "-")
-        status_line = f"{http_status} - {page_status}" if page_status else str(http_status)
 
         owner_uid = info.get("owner_user_id")
         owner_un  = info.get("owner_username")
@@ -686,13 +685,13 @@ async def list_domains(update: Update, context: ContextTypes.DEFAULT_TYPE):
         mention   = make_mention(owner_uid, owner_un, owner_fn) if owner_uid else "-"
 
         msg.append(
-            "--------------------\n"
-            f"{get_display_url(d)}\n"
-            f"AMP Awal     : {get_display_url(info.get('initial_amp'))}\n"
-            f"AMP Sekarang : {amp_display}\n"
-            f"Status       : {status_line}\n"
-            f"Pemilik      : {mention}\n"
-            f"Last Check   : {info.get('last_checked', '-')}"
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+            f"\U0001f310 `{get_display_url(d)}`\n"
+            f"\u26a1 AMP Awal     : `{get_display_url(info.get('initial_amp'))}`\n"
+            f"\u26a1 AMP Sekarang : `{amp_display}`\n"
+            f"\U0001f4e1 Status       : `{http_status}`\n"
+            f"\U0001f464 Pemilik      : {mention}\n"
+            f"\U0001f552 Last Check   : {info.get('last_checked', '-')}"
         )
 
     await safe_reply(
@@ -714,7 +713,7 @@ async def cek(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
     loading_msg = await update.message.reply_text(
-        f"Mengecek {get_display_url(request_url)}..."
+        f"\u23f3 Mengecek `{get_display_url(request_url)}`..."
     )
 
     try:
@@ -724,35 +723,35 @@ async def cek(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         await safe_delete(context, chat_id, loading_msg.message_id)
-        await update.message.reply_text(f"Error saat mengecek: {str(e)[:100]}")
+        await update.message.reply_text(f"\u274c Error saat mengecek: {str(e)[:100]}")
         return
 
     await safe_delete(context, chat_id, loading_msg.message_id)
 
     if amp == "CONN_ERROR":
-        amp_text = "Tidak bisa konek (CONN ERROR)"
+        amp_text = "\u26a0\ufe0f Tidak bisa konek"
     elif amp == "HTTP_ERROR":
-        amp_text = "HTTP Error (4xx)"
+        amp_text = "\u274c HTTP Error (4xx)"
     elif amp is None:
-        amp_text = "Tidak ditemukan (tidak ada amphtml)"
+        amp_text = "\u2796 Tidak ditemukan"
     else:
-        amp_text = get_display_url(amp)
+        amp_text = f"`{get_display_url(amp)}`"
 
     status_display = format_status_display(status)
     redirect_line  = ""
     if status.get("redirect_url"):
         redir_display = get_display_url(status['redirect_url'])
-        redirect_line = f"Redirect ke : {redir_display}\n"
+        redirect_line = f"\U0001f500 Redirect   : `{redir_display}`\n"
 
     await safe_reply(
         update.message,
-        f"*HASIL PENGECEKAN AMP*\n"
-        f"--------------------\n"
-        f"Domain      : {get_display_url(request_url)}\n"
-        f"Status      : {status_display}\n"
+        f"\U0001f50d *HASIL PENGECEKAN AMP*\n"
+        f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+        f"\U0001f310 Domain     : `{get_display_url(request_url)}`\n"
+        f"\U0001f4e1 Status     : `{status_display}`\n"
         f"{redirect_line}"
-        f"AMP URL     : {amp_text}\n"
-        f"--------------------",
+        f"\u26a1 AMP URL    : {amp_text}\n"
+        f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
         disable_web_page_preview=True,
     )
 
@@ -769,32 +768,36 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
     loading_msg = await update.message.reply_text(
-        f"Mengecek status {get_display_url(request_url)}..."
+        f"\u23f3 Mengecek status `{get_display_url(request_url)}`..."
     )
 
     try:
         status = await check_domain_status(request_url)
     except Exception as e:
         await safe_delete(context, chat_id, loading_msg.message_id)
-        await update.message.reply_text(f"Error: {str(e)[:100]}")
+        await update.message.reply_text(f"\u274c Error: {str(e)[:100]}")
         return
 
     await safe_delete(context, chat_id, loading_msg.message_id)
 
-    kondisi       = "Online / Normal" if status["ok"] else (f"{status['error']}" if status["error"] else "Bermasalah")
-    redirect_line = f"Redirect ke  : {get_display_url(status['redirect_url'])}\n" if status.get("redirect_url") else ""
-    page_line     = f"Info Halaman : {status['page_status_text']}\n" if status.get("page_status_text") else ""
+    if status["ok"]:
+        kondisi = "\u2705 Online"
+    elif status["error"]:
+        kondisi = f"\u274c {status['error']}"
+    else:
+        kondisi = "\u26a0\ufe0f Bermasalah"
+
+    redirect_line = f"\U0001f500 Redirect   : `{get_display_url(status['redirect_url'])}`\n" if status.get("redirect_url") else ""
 
     await safe_reply(
         update.message,
-        f"*STATUS DOMAIN*\n"
-        f"--------------------\n"
-        f"Domain      : {get_display_url(request_url)}\n"
-        f"HTTP Status : {status['status_code'] or '-'}\n"
-        f"{page_line}"
+        f"\U0001f4e1 *STATUS DOMAIN*\n"
+        f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+        f"\U0001f310 Domain     : `{get_display_url(request_url)}`\n"
+        f"\U0001f4c8 HTTP Code  : `{status['status_code'] or '-'}`\n"
         f"{redirect_line}"
-        f"Kondisi     : {kondisi}\n"
-        f"--------------------",
+        f"\U0001f7e2 Kondisi    : {kondisi}\n"
+        f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
         disable_web_page_preview=True,
     )
 
@@ -837,11 +840,11 @@ async def update_amp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await safe_delete(context, chat_id, loading_msg.message_id)
 
     if new_amp == "HTTP_ERROR":
-        await update.message.reply_text("Server menolak request saat update AMP.")
+        await update.message.reply_text("\u274c Server menolak request saat update AMP.")
         return
 
     if new_amp == "CONN_ERROR":
-        await update.message.reply_text("Gagal konek ke domain. Coba lagi nanti.")
+        await update.message.reply_text("\u274c Gagal konek ke domain. Coba lagi nanti.")
         return
 
     old_amp = info.get("initial_amp")
@@ -859,13 +862,13 @@ async def update_amp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mention = make_mention(user.id, user.username, user.first_name)
     await safe_reply(
         update.message,
-        f"*AMP REFERENSI DIPERBARUI*\n"
-        f"--------------------\n"
-        f"Domain   : {get_display_url(request_url)}\n"
-        f"AMP Lama : {get_display_url(old_amp)}\n"
-        f"AMP Baru : {get_display_url(new_amp) if new_amp else 'Tidak ada AMP'}\n"
-        f"Oleh     : {mention}\n"
-        f"--------------------",
+        f"\u2705 *AMP REFERENSI DIPERBARUI*\n"
+        f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
+        f"\U0001f310 Domain   : `{get_display_url(request_url)}`\n"
+        f"\u26a1 AMP Lama : `{get_display_url(old_amp)}`\n"
+        f"\u26a1 AMP Baru : `{get_display_url(new_amp) if new_amp else 'Tidak ada AMP'}`\n"
+        f"\U0001f464 Oleh     : {mention}\n"
+        f"\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
         disable_web_page_preview=True,
     )
 
