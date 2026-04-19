@@ -143,7 +143,7 @@ def make_session(ua_index=0, cookie_jar=None):
         "User-Agent"      : USER_AGENTS[ua_index % len(USER_AGENTS)],
         "Accept"          : "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language" : "en-US,en;q=0.9,id;q=0.8",
-        "Accept-Encoding" : "gzip, deflate, br",
+        "Accept-Encoding" : "gzip, deflate",
         "Connection"      : "keep-alive",
         "Upgrade-Insecure-Requests": "1",
         "Cache-Control"   : "max-age=0",
@@ -256,12 +256,17 @@ async def check_domain_status(url):
         "status_code"     : None,
         "page_status_code": None,
         "page_status_text": None,
+        "page_title"      : None,
         "ok"              : False,
         "error"           : None,
         "redirect_url"    : None,
     }
 
-    for ua_idx in range(3):
+    # Selalu pakai browser UA (index 1=Chrome, 3=Safari, 4=Firefox)
+    # BUKAN Googlebot (index 0), agar status akurat seperti user asli
+    browser_ua_indices = [1, 3, 4]
+
+    for ua_idx in browser_ua_indices:
         try:
             async with make_session(ua_index=ua_idx) as session:
                 async with session.get(url, allow_redirects=True, max_redirects=10) as resp:
@@ -273,19 +278,25 @@ async def check_domain_status(url):
 
                     try:
                         html = await safe_read_html(resp)
-                        ps   = extract_page_status(html)
+                        # Ambil title halaman sebagai status indicator
+                        soup = BeautifulSoup(html, "html.parser")
+                        title_tag = soup.find("title")
+                        if title_tag and title_tag.text:
+                            result["page_title"] = title_tag.text.strip()[:80]
+
+                        ps = extract_page_status(html)
                         result["page_status_code"] = ps["code"]
                         result["page_status_text"] = ps["text"]
                     except:
                         pass
 
-                    if resp.status == 403 and ua_idx < 2:
+                    if resp.status == 403 and ua_idx != browser_ua_indices[-1]:
                         continue
 
                     return result
 
         except aiohttp.ClientSSLError as e:
-            if url.startswith("https://") and ua_idx == 0:
+            if url.startswith("https://"):
                 http_url = url.replace("https://", "http://", 1)
                 try:
                     async with make_session(ua_index=1) as session:
@@ -294,6 +305,14 @@ async def check_domain_status(url):
                             result["ok"] = resp2.status < 400 or resp2.status == 403
                             if str(resp2.url) != http_url:
                                 result["redirect_url"] = str(resp2.url)
+                            try:
+                                html2 = await safe_read_html(resp2)
+                                soup2 = BeautifulSoup(html2, "html.parser")
+                                t2 = soup2.find("title")
+                                if t2 and t2.text:
+                                    result["page_title"] = t2.text.strip()[:80]
+                            except:
+                                pass
                             return result
                 except:
                     pass
@@ -512,17 +531,10 @@ async def get_amp_url(domain, retries=3, delay=2):
 # FORMAT STATUS DISPLAY
 # =====================
 def format_status_display(status: dict) -> str:
-    http_code  = status.get("status_code")
-    page_code  = status.get("page_status_code")
-    page_text  = status.get("page_status_text")
-    error      = status.get("error")
-
+    error = status.get("error")
     if error:
         return error
-    if page_code and page_code != http_code:
-        return f"{page_code} (dari halaman: \"{page_text}\")"
-    if page_code and page_text:
-        return f"{page_code} - {page_text}"
+    http_code = status.get("status_code")
     return str(http_code) if http_code else "-"
 
 
