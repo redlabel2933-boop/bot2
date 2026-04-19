@@ -82,6 +82,36 @@ async def safe_delete(context, chat_id, message_id):
 
 
 # =====================
+# HELPER: SAFE REPLY (anti-crash Markdown)
+# Jika Markdown gagal (karakter khusus di URL), fallback ke plain text
+# =====================
+async def safe_reply(message, text, **kwargs):
+    try:
+        return await message.reply_text(text, parse_mode="Markdown", **kwargs)
+    except Exception:
+        # Markdown gagal → kirim tanpa formatting
+        try:
+            clean = text.replace('`', '').replace('*', '').replace('_', '')
+            return await message.reply_text(clean, **kwargs)
+        except Exception as e2:
+            return await message.reply_text(f"⚠️ Error menampilkan hasil: {str(e2)[:100]}")
+
+
+# =====================
+# HELPER: ESCAPE MARKDOWN
+# Escape karakter yang bisa bikin Markdown parse error
+# =====================
+def escape_md(text):
+    if not text:
+        return "-"
+    text = str(text)
+    # Karakter yang break Markdown v1
+    for ch in ('\\', '`', '*', '_', '[', ']', '(', ')'):
+        text = text.replace(ch, '\\' + ch)
+    return text
+
+
+# =====================
 # HELPER: MENTION USER
 # =====================
 def make_mention(user_id, username=None, first_name="Pemilik"):
@@ -490,37 +520,46 @@ async def tambah(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user    = update.effective_user
 
     loading_msg = await update.message.reply_text(
-        f"⏳ Mengecek domain `{get_display_url(request_url)}`...",
-        parse_mode="Markdown"
+        f"⏳ Mengecek domain {get_display_url(request_url)}..."
     )
 
-    status = await check_domain_status(request_url)
+    try:
+        status = await check_domain_status(request_url)
+    except Exception as e:
+        await safe_delete(context, chat_id, loading_msg.message_id)
+        await update.message.reply_text(f"❌ Error saat cek domain: {str(e)[:100]}")
+        return
+
     await safe_delete(context, chat_id, loading_msg.message_id)
 
     if not status["ok"]:
         err = status["error"] or format_status_display(status)
-        await update.message.reply_text(
-            "*Domain tidak bisa diakses!*\n"
-            "────────────────────\n"
-            f"Domain : `{get_display_url(request_url)}`\n"
-            f"Status : `{err}`\n"
-            "Pastikan domain aktif sebelum ditambahkan.",
-            parse_mode="Markdown"
+        await safe_reply(
+            update.message,
+            f"*Domain tidak bisa diakses!*\n"
+            f"────────────────────\n"
+            f"Domain : {get_display_url(request_url)}\n"
+            f"Status : {err}\n"
+            f"Pastikan domain aktif sebelum ditambahkan.",
         )
         return
 
-    loading_msg2 = await update.message.reply_text(
-        "⏳ Mengambil AMP URL...", parse_mode="Markdown"
-    )
-    amp_url = await get_amp_url(request_url)
+    loading_msg2 = await update.message.reply_text("⏳ Mengambil AMP URL...")
+
+    try:
+        amp_url = await get_amp_url(request_url)
+    except Exception as e:
+        await safe_delete(context, chat_id, loading_msg2.message_id)
+        await update.message.reply_text(f"❌ Error saat cek AMP: {str(e)[:100]}")
+        return
+
     await safe_delete(context, chat_id, loading_msg2.message_id)
 
     # ✅ PERBAIKAN: HTTP_ERROR tetap ditolak,
     #    tapi CONN_ERROR → simpan dengan amp = None (domain terbukti OK dari check_domain_status)
     if amp_url == "HTTP_ERROR":
         await update.message.reply_text(
-            "❌ Server menolak request (HTTP 4xx). Domain tidak bisa dipantau.",
-            parse_mode="Markdown"
+            "❌ Server menolak request (HTTP 4xx). Domain tidak bisa dipantau."
         )
         return
 
@@ -528,7 +567,7 @@ async def tambah(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn_warning = ""
     if amp_url == "CONN_ERROR":
         amp_url      = None
-        conn_warning = "\n⚠️ _AMP belum bisa diambil saat ini, akan dicoba kembali saat monitoring._"
+        conn_warning = "\n⚠️ AMP belum bisa diambil saat ini, akan dicoba kembali saat monitoring."
 
     data = load_data()
     data[request_url] = {
@@ -551,17 +590,17 @@ async def tambah(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status_display = format_status_display(status)
     mention        = make_mention(user.id, user.username, user.first_name)
 
-    await update.message.reply_text(
-        "✅ *DOMAIN DITAMBAHKAN*\n"
-        "────────────────────\n"
-        f"Domain   : `{get_display_url(request_url)}`\n"
-        f"Status   : `{status_display}`\n"
-        f"AMP Awal : `{amp_display}`\n"
+    await safe_reply(
+        update.message,
+        f"✅ *DOMAIN DITAMBAHKAN*\n"
+        f"────────────────────\n"
+        f"Domain   : {get_display_url(request_url)}\n"
+        f"Status   : {status_display}\n"
+        f"AMP Awal : {amp_display}\n"
         f"Pemilik  : {mention}\n"
         f"────────────────────"
         f"{conn_warning}",
         disable_web_page_preview=True,
-        parse_mode="Markdown"
     )
 
 
@@ -647,21 +686,25 @@ async def cek(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
     loading_msg = await update.message.reply_text(
-        f"⏳ Mengecek `{get_display_url(request_url)}`...",
-        parse_mode="Markdown"
+        f"⏳ Mengecek {get_display_url(request_url)}..."
     )
 
-    amp, status = await asyncio.gather(
-        get_amp_url(request_url),
-        check_domain_status(request_url)
-    )
+    try:
+        amp, status = await asyncio.gather(
+            get_amp_url(request_url),
+            check_domain_status(request_url)
+        )
+    except Exception as e:
+        await safe_delete(context, chat_id, loading_msg.message_id)
+        await update.message.reply_text(f"❌ Error saat mengecek: {str(e)[:100]}")
+        return
 
     await safe_delete(context, chat_id, loading_msg.message_id)
 
     if amp == "CONN_ERROR":
-        amp_text = "⚠️ Tidak bisa konek (CONN_ERROR)"
+        amp_text = "Tidak bisa konek (CONN ERROR)"
     elif amp == "HTTP_ERROR":
-        amp_text = "❌ HTTP Error (4xx)"
+        amp_text = "HTTP Error (4xx)"
     elif amp is None:
         amp_text = "Tidak ditemukan (tidak ada amphtml)"
     else:
@@ -670,18 +713,19 @@ async def cek(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status_display = format_status_display(status)
     redirect_line  = ""
     if status.get("redirect_url"):
-        redirect_line = f"Redirect ke : `{get_display_url(status['redirect_url'])}`\n"
+        redir_display = get_display_url(status['redirect_url'])
+        redirect_line = f"Redirect ke : {redir_display}\n"
 
-    await update.message.reply_text(
-        "*HASIL PENGECEKAN AMP*\n"
-        "────────────────────\n"
-        f"Domain      : `{get_display_url(request_url)}`\n"
-        f"Status      : `{status_display}`\n"
+    await safe_reply(
+        update.message,
+        f"*HASIL PENGECEKAN AMP*\n"
+        f"────────────────────\n"
+        f"Domain      : {get_display_url(request_url)}\n"
+        f"Status      : {status_display}\n"
         f"{redirect_line}"
-        f"AMP URL     : `{amp_text}`\n"
-        "────────────────────",
+        f"AMP URL     : {amp_text}\n"
+        f"────────────────────",
         disable_web_page_preview=True,
-        parse_mode="Markdown"
     )
 
 
@@ -697,28 +741,33 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
     loading_msg = await update.message.reply_text(
-        f"⏳ Mengecek status `{get_display_url(request_url)}`...",
-        parse_mode="Markdown"
+        f"⏳ Mengecek status {get_display_url(request_url)}..."
     )
 
-    status = await check_domain_status(request_url)
+    try:
+        status = await check_domain_status(request_url)
+    except Exception as e:
+        await safe_delete(context, chat_id, loading_msg.message_id)
+        await update.message.reply_text(f"❌ Error: {str(e)[:100]}")
+        return
+
     await safe_delete(context, chat_id, loading_msg.message_id)
 
     kondisi       = "✅ Online / Normal" if status["ok"] else (f"❌ {status['error']}" if status["error"] else "⚠️ Bermasalah")
-    redirect_line = f"Redirect ke  : `{get_display_url(status['redirect_url'])}`\n" if status.get("redirect_url") else ""
-    page_line     = f"Info Halaman : `{status['page_status_text']}`\n" if status.get("page_status_text") else ""
+    redirect_line = f"Redirect ke  : {get_display_url(status['redirect_url'])}\n" if status.get("redirect_url") else ""
+    page_line     = f"Info Halaman : {status['page_status_text']}\n" if status.get("page_status_text") else ""
 
-    await update.message.reply_text(
-        "*STATUS DOMAIN*\n"
-        "────────────────────\n"
-        f"Domain      : `{get_display_url(request_url)}`\n"
-        f"HTTP Status : `{status['status_code'] or '-'}`\n"
+    await safe_reply(
+        update.message,
+        f"*STATUS DOMAIN*\n"
+        f"────────────────────\n"
+        f"Domain      : {get_display_url(request_url)}\n"
+        f"HTTP Status : {status['status_code'] or '-'}\n"
         f"{page_line}"
         f"{redirect_line}"
         f"Kondisi     : {kondisi}\n"
-        "────────────────────",
+        f"────────────────────",
         disable_web_page_preview=True,
-        parse_mode="Markdown"
     )
 
 
@@ -754,19 +803,24 @@ async def update_amp(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     loading_msg = await update.message.reply_text(
-        f"⏳ Mengambil AMP terbaru dari `{get_display_url(request_url)}`...",
-        parse_mode="Markdown"
+        f"⏳ Mengambil AMP terbaru dari {get_display_url(request_url)}..."
     )
 
-    new_amp = await get_amp_url(request_url)
+    try:
+        new_amp = await get_amp_url(request_url)
+    except Exception as e:
+        await safe_delete(context, chat_id, loading_msg.message_id)
+        await update.message.reply_text(f"❌ Error: {str(e)[:100]}")
+        return
+
     await safe_delete(context, chat_id, loading_msg.message_id)
 
     if new_amp == "HTTP_ERROR":
-        await update.message.reply_text("❌ Server menolak request saat update AMP.", parse_mode="Markdown")
+        await update.message.reply_text("❌ Server menolak request saat update AMP.")
         return
 
     if new_amp == "CONN_ERROR":
-        await update.message.reply_text("❌ Gagal konek ke domain. Coba lagi nanti.", parse_mode="Markdown")
+        await update.message.reply_text("❌ Gagal konek ke domain. Coba lagi nanti.")
         return
 
     old_amp = info.get("initial_amp")
@@ -782,16 +836,16 @@ async def update_amp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     write_log(f"[MANUAL UPDATE] {request_url} {old_amp} -> {new_amp} by {user.id}")
 
     mention = make_mention(user.id, user.username, user.first_name)
-    await update.message.reply_text(
-        "✅ *AMP REFERENSI DIPERBARUI*\n"
-        "────────────────────\n"
-        f"Domain   : `{get_display_url(request_url)}`\n"
-        f"AMP Lama : `{get_display_url(old_amp)}`\n"
-        f"AMP Baru : `{get_display_url(new_amp) if new_amp else 'Tidak ada AMP'}`\n"
+    await safe_reply(
+        update.message,
+        f"✅ *AMP REFERENSI DIPERBARUI*\n"
+        f"────────────────────\n"
+        f"Domain   : {get_display_url(request_url)}\n"
+        f"AMP Lama : {get_display_url(old_amp)}\n"
+        f"AMP Baru : {get_display_url(new_amp) if new_amp else 'Tidak ada AMP'}\n"
         f"Oleh     : {mention}\n"
-        "────────────────────",
+        f"────────────────────",
         disable_web_page_preview=True,
-        parse_mode="Markdown"
     )
 
 
